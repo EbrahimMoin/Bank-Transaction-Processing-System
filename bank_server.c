@@ -18,8 +18,15 @@ typedef struct {
 
 Account accounts[ACCOUNT_COUNT];
 sem_t counter_sem;
+sem_t account_sems[ACCOUNT_COUNT];
 
 void handle_message(char *message);
+void initialize_accounts() {
+    for (int i = 0; i < ACCOUNT_COUNT; i++) {
+        accounts[i].balance = 1000;
+        sem_init(&account_sems[i], 0, 1);
+    }
+}
 
 void* thread_handle_message(void* arg) {
     char* msg = (char*)arg;
@@ -28,11 +35,6 @@ void* thread_handle_message(void* arg) {
     return NULL;
 }
 
-void initialize_accounts() {
-    for (int i = 0; i < ACCOUNT_COUNT; i++) {
-        accounts[i].balance = 1000;
-    }
-}
 
 void process_transaction(char *action, int account_index, int amount) {
     sem_wait(&counter_sem);
@@ -75,6 +77,36 @@ void handle_message(char *message) {
     } else {
         process_transaction(action, account_index, amount);
     }
+    if (strcmp(action, "transfer") == 0) {
+    int to_account;
+    // Message format: "<from_account> transfer <amount> <to_account>"
+    sscanf(message, "%d %*s %d %d", &account_index, &amount, &to_account);
+
+    if (to_account < 0 || to_account >= ACCOUNT_COUNT || to_account == account_index) {
+        printf("[!] Invalid target account: %d\n", to_account);
+        return;
+    }
+
+    int first = account_index < to_account ? account_index : to_account;
+    int second = account_index < to_account ? to_account : account_index;
+
+    
+    sem_wait(&account_sems[first]);
+    sleep(1); // Simulate some processing time
+    sem_wait(&account_sems[second]);
+
+    if (accounts[account_index].balance >= amount) {
+        accounts[account_index].balance -= amount;
+        accounts[to_account].balance += amount;
+        printf("[*] Transferred $%d from Account[%d] to Account[%d]\n", amount, account_index, to_account);
+    } else {
+        printf("[!] Insufficient funds for transfer from Account[%d]\n", account_index);
+    }
+
+    sem_post(&account_sems[second]);
+    sem_post(&account_sems[first]);
+    return;
+}
 }
 
 int main() {
@@ -96,6 +128,8 @@ int main() {
     }
 
     sem_init(&counter_sem, 0, 1);
+    sem_init(&account_sems[0], 0, 1);
+    sem_init(&account_sems[1], 0, 1);
     initialize_accounts();
 
     printf("[*] Bank Server Started.\n");
@@ -122,6 +156,8 @@ int main() {
     mq_close(mq);
     mq_unlink(QUEUE_NAME);
     sem_destroy(&counter_sem);
+    sem_destroy(&account_sems[0]);
+    sem_destroy(&account_sems[1]);
 
     return 0;
 }
