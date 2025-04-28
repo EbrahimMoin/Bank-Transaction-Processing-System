@@ -38,5 +38,6 @@ Open your terminal and run:
 ```bash
 gcc bank_server.c -o bank -lpthread -lrt
 gcc atm.c -o atm -lrt
+./run_atms.sh
 ```
 First run the bank server and then start atm.
